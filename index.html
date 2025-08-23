@@ -197,21 +197,51 @@
     }
 
     function parseBlock(block, idx, key){
-      // Acepta viñetas “o ” o “• ” antes de A)/B)/C)/D) y une líneas partidas
-      const optionRe = /^(?:[•·oO]\s*)?([A-Da-d])[\)\.\-]\s+(.+)/;
-      let prompt=null; const options=[];
-      for(const ln of block){
-        const om = ln.match(optionRe);
-        if(om){ const id=om[1].toUpperCase(); const text=om[2].trim(); options.push({id,text}); }
-        else if(!prompt){ prompt = ln.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i,'').trim(); }
-        else if(options.length){ options[options.length-1].text += ' ' + ln.trim(); }
-      }
-      if(!prompt || !options.length) return null;
-      const inline = inlineKey(block);
-      const correct = key || inline || [];
-      const qtype = (correct.length>1)? 'multi' : 'single';
-      return { id:`q${idx}`, prompt, options, correct, type:qtype, difficulty:'medium', time: state.timePerQ };
+  // Extrae varias opciones en una misma línea: "A) ... o B) ... o C) ..."
+  const multiInline = /(?:^|\s)([A-Da-d])[\)\.\-]\s+(.+?)(?=(?:\s+[o•·]\s*[A-Da-d][\)\.\-]\s)|$)/g;
+
+  let prompt = null;
+  const options = [];
+
+  const addOpt = (id, text) => {
+    if (!id || !text) return;
+    // limpia “o” colgante al final
+    const cleaned = text.trim().replace(/\s+[o•·]\s*$/i, '');
+    options.push({ id: id.toUpperCase(), text: cleaned });
+  };
+
+  for (const raw of block) {
+    // quita etiqueta "Opciones:" si aparece
+    const ln = raw.replace(/^Opciones?\s*:\s*/i, '').trim();
+
+    // busca 1..N opciones dentro de la línea
+    let matched = false;
+    let m;
+    while ((m = multiInline.exec(ln)) !== null) {
+      matched = true;
+      addOpt(m[1], m[2]);
     }
+
+    if (!matched) {
+      // no hay nuevas opciones en la línea
+      if (!prompt) {
+        // elimina encabezado "Pregunta 1:", "Q1", "1."
+        prompt = ln.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i, '').trim();
+      } else if (options.length) {
+        // continuación de la última opción
+        options[options.length - 1].text += ' ' + ln;
+      }
+    }
+  }
+
+  if (!prompt || !options.length) return null;
+
+  const inline = inlineKey(block);
+  const correct = key || inline || [];
+  const qtype = (correct.length > 1) ? 'multi' : 'single';
+
+  return { id:`q${idx}`, prompt, options, correct, type:qtype, difficulty:'medium', time: state.timePerQ };
+}
 
     function inlineKey(block){
       for(let i=block.length-1;i>=0;i--){
