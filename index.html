@@ -16,6 +16,7 @@
     @media(min-width:920px){.grid{grid-template-columns:380px 1fr}}
     .card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px}
     .btn{appearance:none;border:1px solid var(--border);background:#0f172a;color:var(--fg);padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
     .btn:hover{border-color:#334155}
     .btn.primary{background:linear-gradient(90deg,#0ea5b0,#0891b2);border-color:#0ea5b0}
     .btn.ghost{background:transparent}
@@ -50,12 +51,12 @@
   <main class="wrap grid">
     <section class="card">
       <h2 style="margin-top:0">1) Cargar PDFs</h2>
-      <p class="muted">Sube el PDF de <strong>preguntas</strong> y, si la clave está en un documento aparte, sube también el PDF de <strong>clave</strong>. Solo texto incrustado (sin OCR).</p>
+      <p class="muted">Sube el PDF de <strong>preguntas</strong> y, si la clave está aparte, sube también el PDF de <strong>respuestas</strong>. Solo textos con texto incrustado (sin OCR).</p>
       <div class="row" style="margin:10px 0 6px">
         <input id="pdfFile" type="file" accept="application/pdf" />
         <label for="pdfFile" class="file">📄 Preguntas (PDF)</label>
         <input id="keyFile" type="file" accept="application/pdf" />
-        <label for="keyFile" class="file">🔑 Clave (PDF) opcional</label>
+        <label for="keyFile" class="file">🔑 Respuestas (PDF)</label>
         <button id="btnDemo" class="btn ghost">Usar demo interna</button>
       </div>
       <div class="row" style="gap:12px;align-items:center">
@@ -63,15 +64,15 @@
           <input id="timePerQ" type="number" min="10" max="300" value="60" style="margin-left:8px;width:80px;background:#0f1320;border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px"> s
         </label>
       </div>
-      <div id="warn" class="muted">Clave cargada: 0 entradas</div>
+      <div id="warn" class="muted">Sin claves. Sube el PDF de respuestas o usa clave integrada.</div>
       <hr style="border-color:transparent;border-top:1px solid var(--border);margin:16px 0">
       <h2 style="margin:0">2) Vista previa</h2>
       <div id="preview" class="list" style="max-height:340px;overflow:auto"></div>
       <div class="footer">
-        <div class="muted">Claves detectadas marcadas al final de cada línea.</div>
+        <div class="muted">La clave se muestra al final de cada línea si está detectada.</div>
         <div class="row">
           <button id="btnShuffle" class="btn ghost">Mezclar</button>
-          <button id="btnStart" class="btn primary">Jugar</button>
+          <button id="btnStart" class="btn primary" disabled>Jugar</button>
         </div>
       </div>
     </section>
@@ -79,7 +80,7 @@
     <section class="card">
       <div id="gameEmpty">
         <h2 style="margin-top:0">3) Jugar</h2>
-        <p class="muted">Cuando cargues un PDF válido, podrás comenzar la partida.</p>
+        <p class="muted">Carga un PDF válido y asegúrate de que haya claves antes de comenzar.</p>
       </div>
       <div id="game" class="hidden">
         <div id="qHeader" class="row" style="justify-content:space-between">
@@ -106,11 +107,12 @@
 
   <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script>
+    // PWA mínima
     (function initPWA(){
       const manifest={name:"Quiz PWA — PDF → Juego",short_name:"Quiz PWA",start_url:".",display:"standalone",background_color:"#0f1115",theme_color:"#0f1115",icons:[]};
       const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
       const link=document.createElement('link'); link.rel='manifest'; link.href=mURL; document.head.appendChild(link);
-      const swCode=`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v3').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
+      const swCode=`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v4').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
       const swURL=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
       if('serviceWorker' in navigator){navigator.serviceWorker.register(swURL).catch(()=>{});}
     })();
@@ -125,21 +127,24 @@
       timeLeft: 60,
       timer: null,
       selected: new Set(),
-      keyMap: new Map(),
+      keyMap: new Map(),   // nº pregunta -> ['A','C']
       timePerQ: 60,
     };
 
-    const $ = s => document.querySelector(s);
+    const $  = s => document.querySelector(s);
     const $$ = s => Array.from(document.querySelectorAll(s));
+
+    function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a }
+    function updateKPI(){ $('#kpi-count').textContent=state.questions.length; $('#kpi-score').textContent=state.score; $('#kpi-time').textContent=state.timeLeft; }
 
     function resetSession(reshuffle=false){
       if(reshuffle){ state.order = shuffle([...state.questions.keys()]); }
-      state.index = 0; state.score = 0; state.streak = 0; state.selected.clear();
-      const q = state.questions[state.order[0]]; state.timeLeft = q?.time || state.timePerQ; updateKPI();
+      state.index=0; state.score=0; state.streak=0; state.selected.clear();
+      const q = state.questions[state.order[0]];
+      state.timeLeft = q?.time || state.timePerQ; updateKPI();
       $('#qTotal').textContent = state.questions.length; $('#streakPill').textContent = `Racha ${state.streak}`;
     }
-    function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a }
-    function updateKPI(){ $('#kpi-count').textContent = state.questions.length; $('#kpi-score').textContent = state.score; $('#kpi-time').textContent = state.timeLeft; }
+
     function startTimer(){ stopTimer(); state.timer=setInterval(()=>{ state.timeLeft=Math.max(0,state.timeLeft-1); updateKPI(); if(state.timeLeft===0){ validate(false,true); } },1000); }
     function stopTimer(){ if(state.timer){ clearInterval(state.timer); state.timer=null; } }
 
@@ -152,14 +157,31 @@
         box.appendChild(div);
       });
       $('#kpi-count').textContent = state.questions.length;
+
+      const hasInline = state.questions.some(q => q.correct && q.correct.length);
+      const hasKeyMap = state.keyMap.size>0;
+      const canPlay = hasInline || hasKeyMap;
+      $('#btnStart').disabled = !canPlay;
+      $('#btnStart').classList.toggle('primary', canPlay);
+      $('#warn').textContent = canPlay
+        ? `Clave cargada: ${hasKeyMap ? state.keyMap.size : 'integrada'} entradas`
+        : 'Sin claves. Sube el PDF de respuestas o usa preguntas con “Respuesta correcta: A/B/…”.';
     }
 
     // ===== Juego =====
-    function showGame(){ $('#gameEmpty').classList.add('hidden'); $('#game').classList.remove('hidden'); resetSession(false); state.order=[...state.questions.keys()]; renderQuestion(); startTimer(); }
+    function showGame(){
+      $('#gameEmpty').classList.add('hidden');
+      $('#game').classList.remove('hidden');
+      resetSession(false); state.order=[...state.questions.keys()];
+      renderQuestion(); startTimer();
+    }
+
     function renderQuestion(){
-      const idx = state.order[state.index]; const q = state.questions[idx]; if(!q) return;
+      const idx = state.order[state.index];
+      const q = state.questions[idx]; if(!q) return;
       $('#qIndex').textContent = state.index+1; $('#qTotal').textContent = state.questions.length;
-      $('#qPrompt').textContent = q.prompt; const box = $('#qOptions'); box.innerHTML=''; state.selected.clear();
+      $('#qPrompt').textContent = q.prompt;
+      const box = $('#qOptions'); box.innerHTML=''; state.selected.clear();
       q.options.forEach(opt=>{
         const el = document.importNode($('#tpl-option').content,true).children[0];
         el.querySelector('.badge').textContent = opt.id; el.querySelector('.txt').textContent = opt.text;
@@ -169,82 +191,124 @@
       });
       state.timeLeft = q.time || state.timePerQ; updateKPI(); $('#streakPill').textContent = `Racha ${state.streak}`;
     }
-    function scoreFor(ok,q){ const base=100; const w=q.difficulty==='hard'?1.3:q.difficulty==='easy'?0.8:1.0; const tNorm=Math.max(0,Math.min(1,1-((q.time||state.timePerQ-state.timeLeft)/(q.time||state.timePerQ)))); if(ok){const raw=(base*(0.4+0.6*tNorm)+10*state.streak)*w;const bonus=tNorm>0.7?0.2*base:0;return Math.floor(raw+bonus);} return -Math.floor(0.5*base*w); }
-    function validate(autoNext=true,timeOut=false){ const idx=state.order[state.index]; const q=state.questions[idx]; const sel=[...state.selected].sort().join('|'); const corr=[...q.correct].sort().join('|'); const ok=q.correct.length>0 && sel===corr; const delta=scoreFor(ok,q); state.score+=delta; state.streak=ok?state.streak+1:0; updateKPI(); flashResult(ok,delta,timeOut); if(autoNext) nextQuestion(); }
+
+    function scoreFor(ok,q){
+      const base=100, w=q.difficulty==='hard'?1.3:q.difficulty==='easy'?0.8:1.0;
+      const T=(q.time||state.timePerQ), tNorm=Math.max(0,Math.min(1,1-((T-state.timeLeft)/T)));
+      if(ok){ const raw=(base*(0.4+0.6*tNorm)+10*state.streak)*w; const bonus=tNorm>0.7?0.2*base:0; return Math.floor(raw+bonus); }
+      return -Math.floor(0.5*base*w);
+    }
+
+    function validate(autoNext=true,timeOut=false){
+      const idx = state.order[state.index]; const q = state.questions[idx];
+
+      // Bloqueo si no hay clave para esta pregunta
+      if (!q.correct || q.correct.length===0){
+        flashResult(false,0,false);
+        alert('Esta pregunta no tiene clave. Sube el PDF de respuestas.');
+        return;
+      }
+
+      const sel=[...state.selected].sort().join('|');
+      const corr=[...q.correct].sort().join('|');
+      const ok = sel===corr;
+
+      const delta = scoreFor(ok,q); state.score+=delta; state.streak=ok?state.streak+1:0; updateKPI();
+      flashResult(ok,delta,timeOut);
+      if(autoNext) nextQuestion();
+    }
+
     function nextQuestion(){ stopTimer(); if(state.index+1<state.questions.length){ state.index++; renderQuestion(); startTimer(); } else { finish(); } }
     function finish(){ stopTimer(); alert(`Fin de la partida. Puntuación total: ${state.score}`); resetSession(true); renderQuestion(); startTimer(); }
     function clearSelection(){ state.selected.clear(); $$('#qOptions .option').forEach(el=>el.dataset.selected='false'); }
-    function flashResult(ok,delta,timeout){ const msg=timeout?`Tiempo agotado. ${delta} puntos`:(ok?`Correcto. +${delta}`:`Incorrecto. ${delta}`); const div=document.createElement('div'); div.textContent=msg; div.style.position='fixed'; div.style.bottom='20px'; div.style.left='50%'; div.style.transform='translateX(-50%)'; div.style.background=ok?'#14532d':'#3f1d1d'; div.style.border='1px solid #1f2937'; div.style.padding='10px 14px'; div.style.borderRadius='10px'; document.body.appendChild(div); setTimeout(()=>div.remove(),1200); }
+    function flashResult(ok,delta,timeout){
+      const msg=timeout?`Tiempo agotado. ${delta} puntos`:(ok?`Correcto. +${delta}`:`Incorrecto. ${delta}`);
+      const div=document.createElement('div');
+      div.textContent=msg; div.style.position='fixed'; div.style.bottom='20px'; div.style.left='50%'; div.style.transform='translateX(-50%)';
+      div.style.background=ok?'#14532d':'#3f1d1d'; div.style.border='1px solid #1f2937';
+      div.style.padding='10px 14px'; div.style.borderRadius='10px';
+      document.body.appendChild(div); setTimeout(()=>div.remove(),1200);
+    }
 
-    // ===== Parser PDF (sin OCR) =====
-    async function parsePdf(arrayBuffer){
+    // ===== PDF utils =====
+    async function pdfToLines(arrayBuffer){
       const pdfjsLib = window['pdfjs-dist/build/pdf'];
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
       let text=''; for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const c=await page.getTextContent(); text += c.items.map(i=>('str' in i)? i.str : '').join('\n') + '\n'; }
-      const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      return text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    }
 
-      // Claves finales “1:B” o “1:A|D”
+    // ===== Parser de preguntas (segmenta y extrae opciones A–D, incluso en la misma línea) =====
+    async function parsePdf(arrayBuffer){
+      const lines = await pdfToLines(arrayBuffer);
+
+      // Extrae posibles claves integradas tipo "Respuesta correcta: B" o finales "1: B"
       const keyMap = new Map();
-      for(const ln of lines){ const m = ln.match(/^(\d{1,3})\s*[:\-]\s*([A-D](?:\|[A-D])*)\b/i); if(m){ keyMap.set(parseInt(m[1],10), m[2].toUpperCase().split('|')); } }
+      for (const ln of lines) {
+        // Robust key line: viñetas y separadores variados
+        const m = ln.match(/^(?:[\u2022\u00B7o\-\*]\s*)?(\d{1,3})\s*[\)\].:|,\-–—]?\s*(.+)$/i);
+        if (!m) continue;
+        const qn   = parseInt(m[1], 10);
+        const tail = m[2].trim();
+
+        const norm = tail
+          .replace(/\s+(?:y|and)\s+/gi, '|')
+          .replace(/[\/,;]+/g, '|')
+          .replace(/\s*\|\s*/g, '|');
+
+        let letters = (norm.match(/\b[A-D]\b/gi) || []).map(s => s.toUpperCase());
+        if (!letters.length) {
+          const z = norm.match(/^\s*([A-Da-d])\s*\)?\b/);
+          if (z) letters = [z[1].toUpperCase()];
+        }
+        if (letters.length) keyMap.set(qn, letters);
+      }
 
       // Segmentación por encabezados: “Pregunta 1:”, “Q1”, “1.”
       const questions=[]; let current=[]; let qn=0;
-      function flush(){ if(!current.length) return; qn++; const q = parseBlock(current, qn, keyMap.get(qn)); if(q) questions.push(q); current=[]; }
-      for(const ln of lines){ const isHeader=/^(pregunta\s*\d+|q\d+|\d+\.)/i.test(ln); if(isHeader && current.length) flush(); current.push(ln); }
+      const isHeader = (ln)=>/^(pregunta\s*\d+|q\d+|\d+\.)/i.test(ln);
+      const flush = ()=>{ if(!current.length) return; qn++; const q=parseBlock(current, qn, keyMap.get(qn)); if(q) questions.push(q); current=[]; };
+
+      for(const ln of lines){ if(isHeader(ln) && current.length) flush(); current.push(ln); }
       flush();
       return questions;
     }
 
-    // ===== NUEVO: parser robusto opciones en la misma línea =====
+    // Extrae TODAS las opciones aunque vayan en la misma línea, con “o/•/·” como separadores
     function parseBlock(block, idx, key){
-      // Une todo el bloque de opciones en una sola cadena para capturar A) ... o B) ... o C) ... incluso con saltos de línea
       const optionToken = /(?:^|\s)([A-Da-d])[\)\.\-]\s+/;
+      let prompt = null, optionsText = '', inOptions=false, options=[];
 
-      let prompt = null;
-      let optionsText = '';
-      let inOptions = false;
-      const options = [];
-
-      // 1) Detecta la primera aparición de A/B/C/D) para fijar dónde empiezan las opciones
       for (const raw of block) {
-        const line = raw.replace(/^Opciones?\s*:\s*/i, '').trim();
+        const line = raw.replace(/^Opciones?\s*:\s*/i,'').trim();
         if (!inOptions) {
           const hit = line.match(optionToken);
           if (hit) {
-            // Todo lo anterior a la primera opción es el prompt
             const before = line.slice(0, hit.index).trim();
-            prompt = (prompt ?? '') + (prompt ? ' ' : '') + before.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i,'').trim();
+            prompt = (prompt??'') + (prompt?' ':'') + before.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i,'').trim();
             optionsText += line.slice(hit.index).trim() + ' ';
             inOptions = true;
           } else {
-            // Sigue siendo parte del enunciado
-            prompt = (prompt ?? '') + (prompt ? ' ' : '') + line.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i,'').trim();
+            prompt = (prompt??'') + (prompt?' ':'') + line.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i,'').trim();
           }
         } else {
-          // Ya en zona de opciones: concatenar tal cual
           optionsText += line + ' ';
         }
       }
-
       if (!prompt) return null;
 
-      // 2) Extrae TODAS las opciones del texto concatenado
-      const multiInline = /(?:^|\s)([A-Da-d])[\)\.\-]\s+(.+?)(?=(?:\s+[o•·]\s*[A-Da-d][\)\.\-]\s+)|$)/g;
-      let m;
-      while ((m = multiInline.exec(optionsText)) !== null) {
+      const multiInline = /(?:^|\s)([A-Da-d])[\)\.\-]\s+(.+?)(?=(?:\s+[oO•·]\s*[A-Da-d][\)\.\-]\s+)|$)/g;
+      let m; while ((m = multiInline.exec(optionsText)) !== null) {
         const id = m[1].toUpperCase();
-        const txt = m[2].trim().replace(/\s+[o•·]\s*$/i,'');
+        const txt = m[2].trim().replace(/\s+[oO•·]\s*$/,'');
         options.push({ id, text: txt });
       }
-
       if (!options.length) return null;
 
-      // 3) Clave
       const inline = inlineKey(block);
       const correct = key || inline || [];
       const qtype = (correct.length>1)? 'multi' : 'single';
-
       return { id:`q${idx}`, prompt, options, correct, type:qtype, difficulty:'medium', time: state.timePerQ };
     }
 
@@ -257,14 +321,29 @@
       return null;
     }
 
+    // ===== Solo extraer claves desde un PDF de respuestas =====
     async function extractKeysOnly(arrayBuffer){
-      const pdfjsLib = window['pdfjs-dist/build/pdf'];
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-      const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-      let text=''; for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const c=await page.getTextContent(); text += c.items.map(i=>('str' in i)? i.str : '').join('\n') + '\n'; }
-      const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      const lines = await pdfToLines(arrayBuffer);
       const keyMap = new Map();
-      for(const ln of lines){ const m=ln.match(/^(\d{1,3})\s*[:\-]\s*([A-D](?:\|[A-D])*)\b/i); if(m) keyMap.set(parseInt(m[1],10), m[2].toUpperCase().split('|')); }
+
+      for (const ln of lines) {
+        const m = ln.match(/^(?:[\u2022\u00B7o\-\*]\s*)?(\d{1,3})\s*[\)\].:|,\-–—]?\s*(.+)$/i);
+        if (!m) continue;
+        const qn   = parseInt(m[1], 10);
+        const tail = m[2].trim();
+
+        const norm = tail
+          .replace(/\s+(?:y|and)\s+/gi, '|')
+          .replace(/[\/,;]+/g, '|')
+          .replace(/\s*\|\s*/g, '|');
+
+        let letters = (norm.match(/\b[A-D]\b/gi) || []).map(s => s.toUpperCase());
+        if (!letters.length) {
+          const z = norm.match(/^\s*([A-Da-d])\s*\)?\b/);
+          if (z) letters = [z[1].toUpperCase()];
+        }
+        if (letters.length) keyMap.set(qn, letters);
+      }
       return keyMap;
     }
 
@@ -278,7 +357,7 @@
           state.questions = state.questions.map((q,i)=>({ ...q, correct: state.keyMap.get(i+1) || q.correct }));
         }
         state.order = [...state.questions.keys()];
-        renderPreview(); $('#warn').textContent = `Clave cargada: ${state.keyMap.size} entradas`;
+        renderPreview();
       }catch(err){ $('#warn').textContent = 'Error leyendo el PDF o PDF sin texto. Si es escaneado, no hay OCR.'; console.error(err); }
     });
 
@@ -290,15 +369,28 @@
         if(state.questions.length){
           state.questions = state.questions.map((q,i)=>({ ...q, correct: state.keyMap.get(i+1) || q.correct }));
           renderPreview();
+        } else {
+          // aún no hay preguntas, solo informar
+          $('#warn').textContent = `Clave cargada: ${state.keyMap.size} entradas`;
+          // botón jugar seguirá deshabilitado hasta tener preguntas
         }
-        $('#warn').textContent = `Clave cargada: ${state.keyMap.size} entradas`;
-      }catch(err){ $('#warn').textContent = 'No se pudo leer la clave.'; console.error(err); }
+      }catch(err){ $('#warn'].textContent = 'No se pudo leer el PDF de respuestas.'; console.error(err); }
     });
 
     $('#timePerQ').addEventListener('change',(e)=>{ const v=parseInt(e.target.value,10); if(!isNaN(v)) state.timePerQ=v; });
-    $('#btnDemo').addEventListener('click', ()=>{ state.questions=[{id:'q1',prompt:'¿Capital de Francia?',options:[{id:'A',text:'Roma'},{id:'B',text:'París'},{id:'C',text:'Madrid'},{id:'D',text:'Berlín'}],correct:['B'],type:'single',difficulty:'medium',time:state.timePerQ},{id:'q2',prompt:'2+2 =',options:[{id:'A',text:'3'},{id:'B',text:'4'},{id:'C',text:'5'},{id:'D',text:'6'}],correct:['B'],type:'single',difficulty:'easy',time:state.timePerQ},{id:'q3',prompt:'Selecciona vocales',options:[{id:'A',text:'B'},{id:'B',text:'A'},{id:'C',text:'E'},{id:'D',text:'G'}],correct:['B','C'],type:'multi',difficulty:'hard',time:state.timePerQ}]; state.order=[...state.questions.keys()]; renderPreview(); $('#warn').textContent=`Clave cargada: ${state.keyMap.size} entradas`; });
+
+    $('#btnDemo').addEventListener('click', ()=>{
+      state.questions=[
+        {id:'q1',prompt:'¿Capital de Francia?',options:[{id:'A',text:'Roma'},{id:'B',text:'París'},{id:'C',text:'Madrid'},{id:'D',text:'Berlín'}],correct:['B'],type:'single',difficulty:'medium',time:state.timePerQ},
+        {id:'q2',prompt:'2 + 2 =',options:[{id:'A',text:'3'},{id:'B',text:'4'},{id:'C',text:'5'},{id:'D',text:'6'}],correct:['B'],type:'single',difficulty:'easy',time:state.timePerQ},
+        {id:'q3',prompt:'Selecciona vocales',options:[{id:'A',text:'B'},{id:'B',text:'A'},{id:'C',text:'E'},{id:'D',text:'G'}],correct:['B','C'],type:'multi',difficulty:'hard',time:state.timePerQ},
+      ];
+      state.order=[...state.questions.keys()];
+      renderPreview();
+    });
+
     $('#btnShuffle').addEventListener('click', ()=>{ state.order=shuffle([...state.questions.keys()]); renderPreview(); });
-    $('#btnStart').addEventListener('click', ()=>{ if(state.questions.length) showGame(); });
+    $('#btnStart').addEventListener('click', ()=>{ if(!$('#btnStart').disabled) showGame(); });
     $('#btnClear').addEventListener('click', clearSelection);
     $('#btnValidate').addEventListener('click', ()=> validate(true,false));
     $('#btnNext').addEventListener('click', nextQuestion);
