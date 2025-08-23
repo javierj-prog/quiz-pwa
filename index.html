@@ -51,7 +51,7 @@
   <main class="wrap grid">
     <section class="card">
       <h2 style="margin-top:0">1) Cargar PDFs</h2>
-      <p class="muted">Sube el PDF de <strong>preguntas</strong> y, si la clave está aparte, sube también el PDF de <strong>respuestas</strong>. Acepta texto incrustado, no OCR.</p>
+      <p class="muted">Sube el PDF de <strong>preguntas</strong> y, si la clave está aparte, sube también el PDF de <strong>respuestas</strong>. Acepta texto incrustado (sin OCR).</p>
       <div class="row" style="margin:10px 0 6px">
         <input id="pdfFile" type="file" accept="application/pdf" />
         <label for="pdfFile" class="file">📄 Preguntas (PDF)</label>
@@ -112,8 +112,7 @@
       const manifest={name:"Quiz PWA — PDF → Juego",short_name:"Quiz PWA",start_url:".",display:"standalone",background_color:"#0f1115",theme_color:"#0f1115",icons:[]};
       const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
       const link=document.createElement('link'); link.rel='manifest'; link.href=mURL; document.head.appendChild(link);
-      // bump versión SW para romper caché
-      const swCode=`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v6').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
+      const swCode=`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v7').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
       const swURL=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
       if('serviceWorker' in navigator){navigator.serviceWorker.register(swURL).catch(()=>{});}
     })();
@@ -128,7 +127,7 @@
       timeLeft: 60,
       timer: null,
       selected: new Set(),
-      keyMap: new Map(),   // nº pregunta -> ['A','C']
+      keyMap: new Map(),
       timePerQ: 60,
     };
 
@@ -159,12 +158,10 @@
       });
       $('#kpi-count').textContent = state.questions.length;
 
-      // Habilitar Jugar si hay preguntas
       const canPlay = state.questions.length > 0;
       $('#btnStart').disabled = !canPlay;
       $('#btnStart').classList.toggle('primary', canPlay);
 
-      // Mensaje clave
       const hasInline = state.questions.some(q => q.correct && q.correct.length);
       const hasKeyMap = state.keyMap.size > 0;
       $('#warn').textContent = hasInline || hasKeyMap
@@ -246,15 +243,15 @@
     async function parsePdf(arrayBuffer){
       const lines = await pdfToLines(arrayBuffer);
 
-      // Claves integradas o hoja final. Soporta viñeta inicial opcional y formatos mixtos.
+      // Claves integradas o en hoja aparte: ignora viñetas; toma la primera letra A–D tras el número y añade extras.
       const keyMap = new Map();
-      for (const ln of lines) {
-        // • 1. B) Texto… | 1) C | 1.b | 1: A y C | 1 - A|C
-        const m = ln.match(/^(?:\s*[\u2022\u00B7o\-\*]\s*)?(\d{1,3})\s*[)\].:,\-–—]?\s*([A-Da-d])\)?(.*)$/);
+      for (const raw of lines) {
+        const clean = raw.replace(/^[\u2022\u00B7\*\-•\s]+/, '').trim(); // quita viñetas (• · * -) y espacios
+        const m = clean.match(/^(\d{1,3})\s*[)\].:,\-–—]?\s*([A-Da-d])\)?(.*)$/);
         if (!m) continue;
         const qn = parseInt(m[1], 10);
         const first = m[2].toUpperCase();
-        const tail = (m[3] || '');
+        const tail  = (m[3] || '');
         const extras = (tail.replace(/\s+(?:y|and)\s+/gi,'|').match(/[A-D]/gi) || [])
                         .map(x=>x.toUpperCase()).filter(x=>x!==first);
         const letters = [first, ...extras];
@@ -270,7 +267,7 @@
       return questions;
     }
 
-    // Extrae opciones incluso en la misma línea “A) … o B) …”
+    // Extrae opciones aunque vayan en la misma línea “A) … o B) …”
     function parseBlock(block, idx, key){
       const optionToken = /(?:^|\s)([A-Da-d])[\)\.\-]\s+/;
       let prompt=null, optionsText='', inOptions=false, options=[];
@@ -315,16 +312,17 @@
       return null;
     }
 
-    // ===== Leer solo claves desde PDF de respuestas =====
+    // ===== Extraer claves desde PDF de respuestas =====
     async function extractKeysOnly(arrayBuffer){
       const lines = await pdfToLines(arrayBuffer);
       const keyMap = new Map();
-      for (const ln of lines) {
-        const m = ln.match(/^(?:\s*[\u2022\u00B7o\-\*]\s*)?(\d{1,3})\s*[)\].:,\-–—]?\s*([A-Da-d])\)?(.*)$/);
+      for (const raw of lines) {
+        const clean = raw.replace(/^[\u2022\u00B7\*\-•\s]+/, '').trim();
+        const m = clean.match(/^(\d{1,3})\s*[)\].:,\-–—]?\s*([A-Da-d])\)?(.*)$/);
         if (!m) continue;
         const qn = parseInt(m[1], 10);
         const first = m[2].toUpperCase();
-        const tail = (m[3] || '');
+        const tail  = (m[3] || '');
         const extras = (tail.replace(/\s+(?:y|and)\s+/gi,'|').match(/[A-D]/gi) || [])
                         .map(x=>x.toUpperCase()).filter(x=>x!==first);
         const letters = [first, ...extras];
