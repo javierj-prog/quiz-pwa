@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quiz PWA • PDF → Juego</title>
+  <meta name="theme-color" content="#0f1115" />
+  <style>
+    :root{--bg:#0f1115;--bg2:#151924;--fg:#e6e6e6;--muted:#a3a3a3;--acc:#00e5ff;--border:#1f2433}
+    *{box-sizing:border-box}html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif}
+    header{position:sticky;top:0;background:rgba(15,17,21,.9);backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--border);z-index:5}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    h1{font-size:18px;margin:0}
+    .grid{display:grid;gap:16px}
+    @media(min-width:920px){.grid{grid-template-columns:380px 1fr}}
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px}
+    .btn{appearance:none;border:1px solid var(--border);background:#0f172a;color:var(--fg);padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn:hover{border-color:#334155}
+    .btn.primary{background:linear-gradient(90deg,#0ea5b0,#0891b2);border-color:#0ea5b0}
+    .btn.ghost{background:transparent}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input[type=file]{display:none}
+    label.file{border:1px dashed #334155;border-radius:12px;padding:12px 14px;cursor:pointer;display:inline-flex;gap:10px;align-items:center}
+    .muted{color:var(--muted)}
+    .list{display:grid;gap:8px}
+    .item{padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#0f1320}
+    .option{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#0f1320;cursor:pointer}
+    .option[data-selected="true"]{border-color:var(--acc);background:#0c1320}
+    .pill{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px;color:var(--muted)}
+    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+    .score{font-weight:600}
+    .badge{background:#0e7490;border-radius:8px;padding:2px 6px;font-size:12px}
+    .kpi{display:flex;gap:12px;align-items:center}
+    .kpi div{border:1px solid var(--border);padding:6px 8px;border-radius:10px}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap row" style="justify-content:space-between">
+      <h1>Quiz PWA • PDF → Juego</h1>
+      <div class="row kpi">
+        <div>Preguntas: <span id="kpi-count">0</span></div>
+        <div>Puntuación: <span id="kpi-score">0</span></div>
+        <div>Tiempo: <span id="kpi-time">0</span>s</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap grid">
+    <section class="card">
+      <h2 style="margin-top:0">1) Cargar PDF</h2>
+      <p class="muted">Acepta PDFs con <strong>texto incrustado</strong>. Si es un escaneo sin texto, no podrá leerse (sin OCR).</p>
+      <div class="row" style="margin:10px 0 6px">
+        <input id="pdfFile" type="file" accept="application/pdf" />
+        <label for="pdfFile" class="file">📄 Seleccionar PDF</label>
+        <button id="btnDemo" class="btn ghost">Usar demo interna</button>
+      </div>
+      <div id="warn" class="muted"></div>
+      <hr style="border-color:transparent;border-top:1px solid var(--border);margin:16px 0">
+      <h2 style="margin:0">2) Vista previa</h2>
+      <div id="preview" class="list" style="max-height:340px;overflow:auto"></div>
+      <div class="footer">
+        <div class="muted">Claves detectadas marcadas al final de cada línea.</div>
+        <div class="row">
+          <button id="btnShuffle" class="btn ghost">Mezclar</button>
+          <button id="btnStart" class="btn primary">Jugar</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div id="gameEmpty">
+        <h2 style="margin-top:0">3) Jugar</h2>
+        <p class="muted">Cuando cargues un PDF válido, podrás comenzar la partida.</p>
+      </div>
+      <div id="game" class="hidden">
+        <div id="qHeader" class="row" style="justify-content:space-between">
+          <div class="pill">Pregunta <span id="qIndex">1</span>/<span id="qTotal">1</span></div>
+          <div class="pill" id="streakPill">Racha 0</div>
+        </div>
+        <h3 id="qPrompt" style="margin:12px 0 6px">—</h3>
+        <div id="qOptions" class="list"></div>
+        <div class="footer">
+          <div class="row">
+            <button id="btnClear" class="btn ghost">Limpiar</button>
+          </div>
+          <div class="row">
+            <button id="btnValidate" class="btn">Validar</button>
+            <button id="btnNext" class="btn primary">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <template id="tpl-item">
+    <div class="item"></div>
+  </template>
+  <template id="tpl-option">
+    <div class="option"><span class="badge"></span><div class="txt"></div></div>
+  </template>
+
+  <!-- PDF.js desde CDN -->
+  <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>
+    /* ====== Manifest dinámico y Service Worker PWA (todo en 1 archivo) ====== */
+    (function initPWA(){
+      const manifest = {
+        name: "Quiz PWA — PDF → Juego",
+        short_name: "Quiz PWA",
+        start_url: ".",
+        display: "standalone",
+        background_color: "#0f1115",
+        theme_color: "#0f1115",
+        icons: []
+      };
+      const mURL = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: 'application/manifest+json'}));
+      const link = document.createElement('link'); link.rel = 'manifest'; link.href = mURL; document.head.appendChild(link);
+      const swCode = `self.addEventListener('install', e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v1').then(c=>c.addAll(['./'])))});
+self.addEventListener('activate', e=>{e.waitUntil(self.clients.claim())});
+self.addEventListener('fetch', e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
+      const swURL = URL.createObjectURL(new Blob([swCode], {type: 'text/javascript'}));
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register(swURL).catch(()=>{});
+      }
+    })();
+  </script>
+
+  <script>
+    // ======= Estado del juego y utilidades =======
+    const state = {
+      questions: [], // {id, prompt, options:[{id,text}], correct:["A"], time:30}
+      order: [],
+      index: 0,
+      score: 0,
+      streak: 0,
+      timeLeft: 30,
+      timer: null,
+      selected: new Set(),
+    };
+
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+    function resetSession(reshuffle=false){
+      if(reshuffle){ state.order = shuffle([...state.questions.keys()]); }
+      state.index = 0; state.score = 0; state.streak = 0; state.selected.clear();
+      const q = state.questions[state.order[0]]; state.timeLeft = q?.time || 30; updateKPI();
+      $('#qTotal').textContent = state.questions.length; $('#streakPill').textContent = `Racha ${state.streak}`;
+    }
+
+    function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a }
+
+    function updateKPI(){ $('#kpi-count').textContent = state.questions.length; $('#kpi-score').textContent = state.score; $('#kpi-time').textContent = state.timeLeft; }
+
+    function startTimer(){ stopTimer(); state.timer = setInterval(()=>{ state.timeLeft=Math.max(0,state.timeLeft-1); updateKPI(); if(state.timeLeft===0){ validate(false,true); } },1000); }
+    function stopTimer(){ if(state.timer) { clearInterval(state.timer); state.timer=null; } }
+
+    // ======= UI: Vista previa =======
+    function renderPreview(){
+      const box = $('#preview'); box.innerHTML = '';
+      state.questions.forEach((q, i)=>{
+        const div = document.importNode($('#tpl-item').content,true).children[0];
+        div.textContent = `Q${i+1}. ${q.prompt}  ·  Opciones: ${q.options.map(o=>o.id+") "+o.text).join('   ')}  ·  Clave: ${q.correct.length? q.correct.join('|'):'—'}`;
+        box.appendChild(div);
+      });
+      $('#kpi-count').textContent = state.questions.length;
+    }
+
+    // ======= Juego =======
+    function showGame(){
+      $('#gameEmpty').classList.add('hidden');
+      $('#game').classList.remove('hidden');
+      resetSession(false); state.order = [...state.questions.keys()];
+      renderQuestion(); startTimer();
+    }
+
+    function renderQuestion(){
+      const idx = state.order[state.index];
+      const q = state.questions[idx]; if(!q) return;
+      $('#qIndex').textContent = state.index+1; $('#qTotal').textContent = state.questions.length;
+      $('#qPrompt').textContent = q.prompt; const box = $('#qOptions'); box.innerHTML='';
+      state.selected.clear();
+      q.options.forEach(opt=>{
+        const el = document.importNode($('#tpl-option').content,true).children[0];
+        el.querySelector('.badge').textContent = opt.id; el.querySelector('.txt').textContent = opt.text;
+        el.dataset.selected = 'false';
+        el.onclick = ()=>{ const sel = el.dataset.selected==='true'; el.dataset.selected = (!sel).toString(); if(sel){state.selected.delete(opt.id)} else {state.selected.add(opt.id)} };
+        box.appendChild(el);
+      });
+      state.timeLeft = q.time || 30; updateKPI(); $('#streakPill').textContent = `Racha ${state.streak}`;
+    }
+
+    function scoreFor(isCorrect, q){
+      const base=100; const w = q.difficulty==='hard'?1.3 : q.difficulty==='easy'?0.8:1.0;
+      const tNorm = Math.max(0, Math.min(1, 1-( (q.time||30 - state.timeLeft) / (q.time||30) )));
+      if(isCorrect){ const raw = (base*(0.4+0.6*tNorm) + 10*state.streak)*w; const bonus = tNorm>0.7? 0.2*base : 0; return Math.floor(raw+bonus); }
+      return -Math.floor(0.5*base*w);
+    }
+
+    function validate(autoNext=true, timeOut=false){
+      const idx = state.order[state.index]; const q = state.questions[idx];
+      const sel = [...state.selected].sort().join('|'); const corr = [...q.correct].sort().join('|');
+      const ok = q.correct.length>0 && sel===corr;
+      const delta = scoreFor(ok,q); state.score += delta; state.streak = ok ? state.streak+1 : 0; updateKPI();
+      flashResult(ok, delta, timeOut);
+      if(autoNext) nextQuestion();
+    }
+
+    function nextQuestion(){
+      stopTimer();
+      if(state.index+1 < state.questions.length){ state.index++; renderQuestion(); startTimer(); }
+      else { finish(); }
+    }
+
+    function finish(){
+      stopTimer();
+      alert(`Fin de la partida. Puntuación total: ${state.score}`);
+      // Reinicio suave
+      resetSession(true); renderQuestion(); startTimer();
+    }
+
+    function clearSelection(){ state.selected.clear(); $$('#qOptions .option').forEach(el=>el.dataset.selected='false'); }
+
+    function flashResult(ok, delta, timeout){
+      const msg = timeout? `Tiempo agotado. ${delta} puntos` : (ok? `Correcto. +${delta}` : `Incorrecto. ${delta}`);
+      const div = document.createElement('div');
+      div.textContent = msg; div.style.position='fixed'; div.style.bottom='20px'; div.style.left='50%'; div.style.transform='translateX(-50%)';
+      div.style.background = ok? '#14532d' : '#3f1d1d'; div.style.border='1px solid #1f2937'; div.style.padding='10px 14px'; div.style.borderRadius='10px';
+      document.body.appendChild(div); setTimeout(()=>div.remove(), 1200);
+    }
+
+    // ======= Parser de PDF (heurístico, sin OCR) =======
+    async function parsePdf(arrayBuffer){
+      const pdfjsLib = window['pdfjs-dist/build/pdf'];
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+      const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+      let text = '';
+      for(let p=1;p<=pdf.numPages;p++){
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        const strings = content.items.map(i=>('str' in i)? i.str : '').join('\n');
+        text += strings + '\n';
+      }
+      const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      // Mapa de claves finales: "1:B" o "1: A|D"
+      const keyMap = new Map();
+      for(const ln of lines){
+        const m = ln.match(/^(\d{1,3})\s*[:\-]\s*([A-D](?:\|[A-D])*)\b/i);
+        if(m){ keyMap.set(parseInt(m[1],10), m[2].toUpperCase().split('|')); }
+      }
+      // Segmentación por encabezados: "Pregunta 1:", "Q1", "1."
+      const questions=[]; let current=[]; let qn=0;
+      function flush(){ if(!current.length) return; qn++; const q = parseBlock(current, qn, keyMap.get(qn)); if(q) questions.push(q); current=[]; }
+      for(const ln of lines){
+        const isHeader = /^(pregunta\s*\d+|q\d+|\d+\.)/i.test(ln);
+        if(isHeader && current.length) flush();
+        current.push(ln);
+      }
+      flush();
+      return questions;
+    }
+
+    function parseBlock(block, idx, key){
+      const optionRe = /^(?:[A-Da-d][\)\.\-]\s+)(.+)/;
+      let prompt=null; const options=[];
+      for(const ln of block){
+        const om = ln.match(optionRe);
+        if(om){ const id = ln[0].toUpperCase(); options.push({id, text: om[1].trim()}); }
+        else if(!prompt){ prompt = ln.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i,'').trim(); }
+      }
+      if(!prompt || !options.length) return null;
+      const inline = inlineKey(block);
+      const correct = key || inline || [];
+      const qtype = (correct.length>1)? 'multi' : 'single';
+      return { id:`q${idx}`, prompt, options, correct, type:qtype, difficulty:'medium', time:30 };
+    }
+
+    function inlineKey(block){
+      for(let i=block.length-1;i>=0;i--){
+        const ln = block[i];
+        const m = ln.match(/(respuesta\s*corr(?:ecta)?|soluci[óo]n)\s*[:\-]\s*([A-D](?:\|[A-D])*)/i);
+        if(m) return m[2].toUpperCase().split('|');
+      }
+      return null;
+    }
+
+    // ======= Eventos UI =======
+    $('#pdfFile').addEventListener('change', async (e)=>{
+      const file = e.target.files?.[0]; if(!file) return;
+      const buf = await file.arrayBuffer();
+      try{
+        state.questions = await parsePdf(buf);
+        state.order = [...state.questions.keys()];
+        renderPreview(); $('#warn').textContent = state.questions.length? '' : 'No se detectaron preguntas con las reglas actuales.';
+      }catch(err){ $('#warn').textContent = 'Error leyendo el PDF o el PDF no contiene texto. Si es escaneado, no se puede procesar sin OCR.'; console.error(err); }
+    });
+
+    $('#btnDemo').addEventListener('click', ()=>{
+      // Demo mínima sin PDF
+      state.questions = [
+        {id:'q1', prompt:'¿Capital de Francia?', options:[{id:'A',text:'Roma'},{id:'B',text:'París'},{id:'C',text:'Madrid'},{id:'D',text:'Berlín'}], correct:['B'], type:'single', difficulty:'medium', time:25},
+        {id:'q2', prompt:'2+2 =', options:[{id:'A',text:'3'},{id:'B',text:'4'},{id:'C',text:'5'},{id:'D',text:'6'}], correct:['B'], type:'single', difficulty:'easy', time:20},
+        {id:'q3', prompt:'Selecciona vocales', options:[{id:'A',text:'B'},{id:'B',text:'A'},{id:'C',text:'E'},{id:'D',text:'G'}], correct:['B','C'], type:'multi', difficulty:'hard', time:30},
+      ];
+      state.order = [...state.questions.keys()];
+      renderPreview(); $('#warn').textContent = '';
+    });
+
+    $('#btnShuffle').addEventListener('click', ()=>{ state.order = shuffle([...state.questions.keys()]); renderPreview(); });
+    $('#btnStart').addEventListener('click', ()=>{ if(state.questions.length) showGame(); });
+    $('#btnClear').addEventListener('click', clearSelection);
+    $('#btnValidate').addEventListener('click', ()=> validate(true,false));
+    $('#btnNext').addEventListener('click', nextQuestion);
+  </script>
+</body>
+</html>
