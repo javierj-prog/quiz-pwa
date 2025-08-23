@@ -63,7 +63,7 @@
           <input id="timePerQ" type="number" min="10" max="300" value="60" style="margin-left:8px;width:80px;background:#0f1320;border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px"> s
         </label>
       </div>
-      <div id="warn" class="muted"></div>
+      <div id="warn" class="muted">Clave cargada: 0 entradas</div>
       <hr style="border-color:transparent;border-top:1px solid var(--border);margin:16px 0">
       <h2 style="margin:0">2) Vista previa</h2>
       <div id="preview" class="list" style="max-height:340px;overflow:auto"></div>
@@ -107,12 +107,12 @@
   <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script>
     (function initPWA(){
-      const manifest = {name:"Quiz PWA — PDF → Juego",short_name:"Quiz PWA",start_url:".",display:"standalone",background_color:"#0f1115",theme_color:"#0f1115",icons:[]};
-      const mURL = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'}));
-      const link = document.createElement('link'); link.rel='manifest'; link.href=mURL; document.head.appendChild(link);
-      const swCode = `self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v2').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
-      const swURL = URL.createObjectURL(new Blob([swCode], {type:'text/javascript'}));
-      if('serviceWorker' in navigator){ navigator.serviceWorker.register(swURL).catch(()=>{}); }
+      const manifest={name:"Quiz PWA — PDF → Juego",short_name:"Quiz PWA",start_url:".",display:"standalone",background_color:"#0f1115",theme_color:"#0f1115",icons:[]};
+      const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
+      const link=document.createElement('link'); link.rel='manifest'; link.href=mURL; document.head.appendChild(link);
+      const swCode=`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v3').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
+      const swURL=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
+      if('serviceWorker' in navigator){navigator.serviceWorker.register(swURL).catch(()=>{});}
     })();
 
     // ===== Estado =====
@@ -196,52 +196,57 @@
       return questions;
     }
 
+    // ===== NUEVO: parser robusto opciones en la misma línea =====
     function parseBlock(block, idx, key){
-  // Extrae varias opciones en una misma línea: "A) ... o B) ... o C) ..."
-  const multiInline = /(?:^|\s)([A-Da-d])[\)\.\-]\s+(.+?)(?=(?:\s+[o•·]\s*[A-Da-d][\)\.\-]\s)|$)/g;
+      // Une todo el bloque de opciones en una sola cadena para capturar A) ... o B) ... o C) ... incluso con saltos de línea
+      const optionToken = /(?:^|\s)([A-Da-d])[\)\.\-]\s+/;
 
-  let prompt = null;
-  const options = [];
+      let prompt = null;
+      let optionsText = '';
+      let inOptions = false;
+      const options = [];
 
-  const addOpt = (id, text) => {
-    if (!id || !text) return;
-    // limpia “o” colgante al final
-    const cleaned = text.trim().replace(/\s+[o•·]\s*$/i, '');
-    options.push({ id: id.toUpperCase(), text: cleaned });
-  };
-
-  for (const raw of block) {
-    // quita etiqueta "Opciones:" si aparece
-    const ln = raw.replace(/^Opciones?\s*:\s*/i, '').trim();
-
-    // busca 1..N opciones dentro de la línea
-    let matched = false;
-    let m;
-    while ((m = multiInline.exec(ln)) !== null) {
-      matched = true;
-      addOpt(m[1], m[2]);
-    }
-
-    if (!matched) {
-      // no hay nuevas opciones en la línea
-      if (!prompt) {
-        // elimina encabezado "Pregunta 1:", "Q1", "1."
-        prompt = ln.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i, '').trim();
-      } else if (options.length) {
-        // continuación de la última opción
-        options[options.length - 1].text += ' ' + ln;
+      // 1) Detecta la primera aparición de A/B/C/D) para fijar dónde empiezan las opciones
+      for (const raw of block) {
+        const line = raw.replace(/^Opciones?\s*:\s*/i, '').trim();
+        if (!inOptions) {
+          const hit = line.match(optionToken);
+          if (hit) {
+            // Todo lo anterior a la primera opción es el prompt
+            const before = line.slice(0, hit.index).trim();
+            prompt = (prompt ?? '') + (prompt ? ' ' : '') + before.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i,'').trim();
+            optionsText += line.slice(hit.index).trim() + ' ';
+            inOptions = true;
+          } else {
+            // Sigue siendo parte del enunciado
+            prompt = (prompt ?? '') + (prompt ? ' ' : '') + line.replace(/^(pregunta\s*\d+|q\d+|\d+\.)\s*/i,'').trim();
+          }
+        } else {
+          // Ya en zona de opciones: concatenar tal cual
+          optionsText += line + ' ';
+        }
       }
+
+      if (!prompt) return null;
+
+      // 2) Extrae TODAS las opciones del texto concatenado
+      const multiInline = /(?:^|\s)([A-Da-d])[\)\.\-]\s+(.+?)(?=(?:\s+[o•·]\s*[A-Da-d][\)\.\-]\s+)|$)/g;
+      let m;
+      while ((m = multiInline.exec(optionsText)) !== null) {
+        const id = m[1].toUpperCase();
+        const txt = m[2].trim().replace(/\s+[o•·]\s*$/i,'');
+        options.push({ id, text: txt });
+      }
+
+      if (!options.length) return null;
+
+      // 3) Clave
+      const inline = inlineKey(block);
+      const correct = key || inline || [];
+      const qtype = (correct.length>1)? 'multi' : 'single';
+
+      return { id:`q${idx}`, prompt, options, correct, type:qtype, difficulty:'medium', time: state.timePerQ };
     }
-  }
-
-  if (!prompt || !options.length) return null;
-
-  const inline = inlineKey(block);
-  const correct = key || inline || [];
-  const qtype = (correct.length > 1) ? 'multi' : 'single';
-
-  return { id:`q${idx}`, prompt, options, correct, type:qtype, difficulty:'medium', time: state.timePerQ };
-}
 
     function inlineKey(block){
       for(let i=block.length-1;i>=0;i--){
@@ -273,7 +278,7 @@
           state.questions = state.questions.map((q,i)=>({ ...q, correct: state.keyMap.get(i+1) || q.correct }));
         }
         state.order = [...state.questions.keys()];
-        renderPreview(); $('#warn').textContent = state.questions.length? '' : 'No se detectaron preguntas con las reglas actuales.';
+        renderPreview(); $('#warn').textContent = `Clave cargada: ${state.keyMap.size} entradas`;
       }catch(err){ $('#warn').textContent = 'Error leyendo el PDF o PDF sin texto. Si es escaneado, no hay OCR.'; console.error(err); }
     });
 
@@ -291,7 +296,7 @@
     });
 
     $('#timePerQ').addEventListener('change',(e)=>{ const v=parseInt(e.target.value,10); if(!isNaN(v)) state.timePerQ=v; });
-    $('#btnDemo').addEventListener('click', ()=>{ state.questions=[{id:'q1',prompt:'¿Capital de Francia?',options:[{id:'A',text:'Roma'},{id:'B',text:'París'},{id:'C',text:'Madrid'},{id:'D',text:'Berlín'}],correct:['B'],type:'single',difficulty:'medium',time:state.timePerQ},{id:'q2',prompt:'2+2 =',options:[{id:'A',text:'3'},{id:'B',text:'4'},{id:'C',text:'5'},{id:'D',text:'6'}],correct:['B'],type:'single',difficulty:'easy',time:state.timePerQ},{id:'q3',prompt:'Selecciona vocales',options:[{id:'A',text:'B'},{id:'B',text:'A'},{id:'C',text:'E'},{id:'D',text:'G'}],correct:['B','C'],type:'multi',difficulty:'hard',time:state.timePerQ}]; state.order=[...state.questions.keys()]; renderPreview(); $('#warn').textContent=''; });
+    $('#btnDemo').addEventListener('click', ()=>{ state.questions=[{id:'q1',prompt:'¿Capital de Francia?',options:[{id:'A',text:'Roma'},{id:'B',text:'París'},{id:'C',text:'Madrid'},{id:'D',text:'Berlín'}],correct:['B'],type:'single',difficulty:'medium',time:state.timePerQ},{id:'q2',prompt:'2+2 =',options:[{id:'A',text:'3'},{id:'B',text:'4'},{id:'C',text:'5'},{id:'D',text:'6'}],correct:['B'],type:'single',difficulty:'easy',time:state.timePerQ},{id:'q3',prompt:'Selecciona vocales',options:[{id:'A',text:'B'},{id:'B',text:'A'},{id:'C',text:'E'},{id:'D',text:'G'}],correct:['B','C'],type:'multi',difficulty:'hard',time:state.timePerQ}]; state.order=[...state.questions.keys()]; renderPreview(); $('#warn').textContent=`Clave cargada: ${state.keyMap.size} entradas`; });
     $('#btnShuffle').addEventListener('click', ()=>{ state.order=shuffle([...state.questions.keys()]); renderPreview(); });
     $('#btnStart').addEventListener('click', ()=>{ if(state.questions.length) showGame(); });
     $('#btnClear').addEventListener('click', clearSelection);
