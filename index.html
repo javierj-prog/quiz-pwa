@@ -51,7 +51,7 @@
   <main class="wrap grid">
     <section class="card">
       <h2 style="margin-top:0">1) Cargar PDFs</h2>
-      <p class="muted">Sube el PDF de <strong>preguntas</strong> y, si la clave está aparte, sube también el PDF de <strong>respuestas</strong>. Solo textos con texto incrustado (sin OCR).</p>
+      <p class="muted">Sube el PDF de <strong>preguntas</strong> y, si la clave está aparte, sube también el PDF de <strong>respuestas</strong>. Solo PDFs con texto incrustado.</p>
       <div class="row" style="margin:10px 0 6px">
         <input id="pdfFile" type="file" accept="application/pdf" />
         <label for="pdfFile" class="file">📄 Preguntas (PDF)</label>
@@ -64,12 +64,12 @@
           <input id="timePerQ" type="number" min="10" max="300" value="60" style="margin-left:8px;width:80px;background:#0f1320;border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px"> s
         </label>
       </div>
-      <div id="warn" class="muted">Sin claves. Sube el PDF de respuestas o usa clave integrada.</div>
+      <div id="warn" class="muted">Sin claves. Puedes jugar, pero no se validará.</div>
       <hr style="border-color:transparent;border-top:1px solid var(--border);margin:16px 0">
       <h2 style="margin:0">2) Vista previa</h2>
       <div id="preview" class="list" style="max-height:340px;overflow:auto"></div>
       <div class="footer">
-        <div class="muted">La clave se muestra al final de cada línea si está detectada.</div>
+        <div class="muted">La clave aparece al final si se detecta.</div>
         <div class="row">
           <button id="btnShuffle" class="btn ghost">Mezclar</button>
           <button id="btnStart" class="btn primary" disabled>Jugar</button>
@@ -80,7 +80,7 @@
     <section class="card">
       <div id="gameEmpty">
         <h2 style="margin-top:0">3) Jugar</h2>
-        <p class="muted">Carga un PDF válido y asegúrate de que haya claves antes de comenzar.</p>
+        <p class="muted">Carga preguntas y pulsa Jugar.</p>
       </div>
       <div id="game" class="hidden">
         <div id="qHeader" class="row" style="justify-content:space-between">
@@ -112,7 +112,8 @@
       const manifest={name:"Quiz PWA — PDF → Juego",short_name:"Quiz PWA",start_url:".",display:"standalone",background_color:"#0f1115",theme_color:"#0f1115",icons:[]};
       const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
       const link=document.createElement('link'); link.rel='manifest'; link.href=mURL; document.head.appendChild(link);
-      const swCode=`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v4').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
+      // bump versión para romper caché
+      const swCode=`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('quiz-pwa-v5').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match('./')))});`;
       const swURL=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
       if('serviceWorker' in navigator){navigator.serviceWorker.register(swURL).catch(()=>{});}
     })();
@@ -127,7 +128,7 @@
       timeLeft: 60,
       timer: null,
       selected: new Set(),
-      keyMap: new Map(),   // nº pregunta -> ['A','C']
+      keyMap: new Map(),   // nº -> ['A', ...]
       timePerQ: 60,
     };
 
@@ -158,14 +159,17 @@
       });
       $('#kpi-count').textContent = state.questions.length;
 
-      const hasInline = state.questions.some(q => q.correct && q.correct.length);
-      const hasKeyMap = state.keyMap.size>0;
-      const canPlay = hasInline || hasKeyMap;
+      // Habilitar Jugar si hay preguntas
+      const canPlay = state.questions.length > 0;
       $('#btnStart').disabled = !canPlay;
       $('#btnStart').classList.toggle('primary', canPlay);
-      $('#warn').textContent = canPlay
+
+      // Mensaje clave
+      const hasInline = state.questions.some(q => q.correct && q.correct.length);
+      const hasKeyMap = state.keyMap.size > 0;
+      $('#warn').textContent = hasInline || hasKeyMap
         ? `Clave cargada: ${hasKeyMap ? state.keyMap.size : 'integrada'} entradas`
-        : 'Sin claves. Sube el PDF de respuestas o usa preguntas con “Respuesta correcta: A/B/…”.';
+        : 'Sin claves. Puedes jugar, pero la validación avisará “sin clave”.';
     }
 
     // ===== Juego =====
@@ -202,10 +206,9 @@
     function validate(autoNext=true,timeOut=false){
       const idx = state.order[state.index]; const q = state.questions[idx];
 
-      // Bloqueo si no hay clave para esta pregunta
       if (!q.correct || q.correct.length===0){
         flashResult(false,0,false);
-        alert('Esta pregunta no tiene clave. Sube el PDF de respuestas.');
+        alert('Pregunta sin clave. Sube el PDF de respuestas o usa clave integrada.');
         return;
       }
 
@@ -239,47 +242,36 @@
       return text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
     }
 
-    // ===== Parser de preguntas (segmenta y extrae opciones A–D, incluso en la misma línea) =====
+    // ===== Parser de preguntas =====
     async function parsePdf(arrayBuffer){
       const lines = await pdfToLines(arrayBuffer);
 
-      // Extrae posibles claves integradas tipo "Respuesta correcta: B" o finales "1: B"
+      // Claves integradas/hoja final: robusto
       const keyMap = new Map();
       for (const ln of lines) {
-        // Robust key line: viñetas y separadores variados
         const m = ln.match(/^(?:[\u2022\u00B7o\-\*]\s*)?(\d{1,3})\s*[\)\].:|,\-–—]?\s*(.+)$/i);
         if (!m) continue;
         const qn   = parseInt(m[1], 10);
         const tail = m[2].trim();
-
-        const norm = tail
-          .replace(/\s+(?:y|and)\s+/gi, '|')
-          .replace(/[\/,;]+/g, '|')
-          .replace(/\s*\|\s*/g, '|');
-
-        let letters = (norm.match(/\b[A-D]\b/gi) || []).map(s => s.toUpperCase());
-        if (!letters.length) {
-          const z = norm.match(/^\s*([A-Da-d])\s*\)?\b/);
-          if (z) letters = [z[1].toUpperCase()];
-        }
+        const norm = tail.replace(/\s+(?:y|and)\s+/gi,'|').replace(/[\/,;]+/g,'|').replace(/\s*\|\s*/g,'|');
+        let letters = (norm.match(/\b[A-D]\b/gi) || []).map(s=>s.toUpperCase());
+        if (!letters.length){ const z = norm.match(/^\s*([A-Da-d])\s*\)?\b/); if(z) letters=[z[1].toUpperCase()]; }
         if (letters.length) keyMap.set(qn, letters);
       }
 
-      // Segmentación por encabezados: “Pregunta 1:”, “Q1”, “1.”
+      // Segmentación por encabezados
       const questions=[]; let current=[]; let qn=0;
-      const isHeader = (ln)=>/^(pregunta\s*\d+|q\d+|\d+\.)/i.test(ln);
+      const isHeader = ln=>/^(pregunta\s*\d+|q\d+|\d+\.)/i.test(ln);
       const flush = ()=>{ if(!current.length) return; qn++; const q=parseBlock(current, qn, keyMap.get(qn)); if(q) questions.push(q); current=[]; };
-
       for(const ln of lines){ if(isHeader(ln) && current.length) flush(); current.push(ln); }
       flush();
       return questions;
     }
 
-    // Extrae TODAS las opciones aunque vayan en la misma línea, con “o/•/·” como separadores
+    // Extrae opciones incluso en la misma línea “A) … o B) …”
     function parseBlock(block, idx, key){
       const optionToken = /(?:^|\s)([A-Da-d])[\)\.\-]\s+/;
-      let prompt = null, optionsText = '', inOptions=false, options=[];
-
+      let prompt=null, optionsText='', inOptions=false, options=[];
       for (const raw of block) {
         const line = raw.replace(/^Opciones?\s*:\s*/i,'').trim();
         if (!inOptions) {
@@ -321,27 +313,18 @@
       return null;
     }
 
-    // ===== Solo extraer claves desde un PDF de respuestas =====
+    // ===== Leer solo claves desde PDF de respuestas =====
     async function extractKeysOnly(arrayBuffer){
       const lines = await pdfToLines(arrayBuffer);
       const keyMap = new Map();
-
       for (const ln of lines) {
         const m = ln.match(/^(?:[\u2022\u00B7o\-\*]\s*)?(\d{1,3})\s*[\)\].:|,\-–—]?\s*(.+)$/i);
         if (!m) continue;
         const qn   = parseInt(m[1], 10);
         const tail = m[2].trim();
-
-        const norm = tail
-          .replace(/\s+(?:y|and)\s+/gi, '|')
-          .replace(/[\/,;]+/g, '|')
-          .replace(/\s*\|\s*/g, '|');
-
-        let letters = (norm.match(/\b[A-D]\b/gi) || []).map(s => s.toUpperCase());
-        if (!letters.length) {
-          const z = norm.match(/^\s*([A-Da-d])\s*\)?\b/);
-          if (z) letters = [z[1].toUpperCase()];
-        }
+        const norm = tail.replace(/\s+(?:y|and)\s+/gi,'|').replace(/[\/,;]+/g,'|').replace(/\s*\|\s*/g,'|');
+        let letters = (norm.match(/\b[A-D]\b/gi) || []).map(s=>s.toUpperCase());
+        if (!letters.length){ const z = norm.match(/^\s*([A-Da-d])\s*\)?\b/); if(z) letters=[z[1].toUpperCase()]; }
         if (letters.length) keyMap.set(qn, letters);
       }
       return keyMap;
@@ -358,7 +341,7 @@
         }
         state.order = [...state.questions.keys()];
         renderPreview();
-      }catch(err){ $('#warn').textContent = 'Error leyendo el PDF o PDF sin texto. Si es escaneado, no hay OCR.'; console.error(err); }
+      }catch(err){ $('#warn').textContent = 'Error leyendo preguntas o PDF sin texto.'; console.error(err); }
     });
 
     $('#keyFile').addEventListener('change', async (e)=>{
@@ -370,15 +353,12 @@
           state.questions = state.questions.map((q,i)=>({ ...q, correct: state.keyMap.get(i+1) || q.correct }));
           renderPreview();
         } else {
-          // aún no hay preguntas, solo informar
           $('#warn').textContent = `Clave cargada: ${state.keyMap.size} entradas`;
-          // botón jugar seguirá deshabilitado hasta tener preguntas
         }
-      }catch(err){ $('#warn'].textContent = 'No se pudo leer el PDF de respuestas.'; console.error(err); }
+      }catch(err){ $('#warn').textContent = 'No se pudo leer el PDF de respuestas.'; console.error(err); }
     });
 
     $('#timePerQ').addEventListener('change',(e)=>{ const v=parseInt(e.target.value,10); if(!isNaN(v)) state.timePerQ=v; });
-
     $('#btnDemo').addEventListener('click', ()=>{
       state.questions=[
         {id:'q1',prompt:'¿Capital de Francia?',options:[{id:'A',text:'Roma'},{id:'B',text:'París'},{id:'C',text:'Madrid'},{id:'D',text:'Berlín'}],correct:['B'],type:'single',difficulty:'medium',time:state.timePerQ},
@@ -390,7 +370,7 @@
     });
 
     $('#btnShuffle').addEventListener('click', ()=>{ state.order=shuffle([...state.questions.keys()]); renderPreview(); });
-    $('#btnStart').addEventListener('click', ()=>{ if(!$('#btnStart').disabled) showGame(); });
+    $('#btnStart').addEventListener('click', ()=>{ showGame(); });
     $('#btnClear').addEventListener('click', clearSelection);
     $('#btnValidate').addEventListener('click', ()=> validate(true,false));
     $('#btnNext').addEventListener('click', nextQuestion);
