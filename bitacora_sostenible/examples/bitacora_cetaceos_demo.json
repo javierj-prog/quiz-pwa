@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "publication_name": "Bitácora Sostenible",
+    "subtitle": "La sostenibilidad explicada desde el trabajo diario del puerto",
+    "department": "División de Transición Ecológica, Sostenibilidad Medioambiental y Sistemas de Gestión",
+    "email": "medioambiente@puertoalicante.com",
+    "issue_number": "07",
+    "issue_date": "2026-05-09",
+    "layout_choice": "Pieza visual/fotográfica",
+    "logo_uri": "",
+    "logo_missing": true
+  },
+  "headline": "Comienza la campaña de avistamientos de cetáceos en el entorno portuario",
+  "standfirst": "Durante las próximas semanas se pondrá en marcha una observación sistemática para mejorar el conocimiento sobre presencia, frecuencia y comportamiento de cetáceos en el área de influencia del puerto.",
+  "modules": {
+    "editorial": {
+      "title": "Contexto",
+      "body": "La campaña nace como una acción de seguimiento y aprendizaje. El objetivo es reunir observaciones consistentes, comparar patrones temporales y documentar situaciones relevantes para mejorar la comprensión del medio marino próximo al puerto."
+    },
+    "hero_photo": {
+      "image": "",
+      "caption": "Imagen de referencia de cetáceos (placeholder)."
+    },
+    "concept": {
+      "term": "Avistamiento oportunista",
+      "explanation": "Registro de presencia realizado durante actividades ordinarias, con anotación de fecha, zona y condiciones de observación."
+    },
+    "fact_sheet": {
+      "title": "Ficha visual · Cetáceos",
+      "summary": "Guía breve para homogeneizar observaciones durante la campaña.",
+      "items": "Especie observada (si es posible)\nNúmero aproximado de individuos\nDirección de desplazamiento\nCondición del mar y visibilidad"
+    },
+    "closing": {
+      "text": "Esta primera fase prioriza la calidad del registro y la trazabilidad de cada observación para construir una base útil a medio plazo."
+    }
+  }
+}
