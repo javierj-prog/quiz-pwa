@@ -1,101 +1,85 @@
-<main class="modules">
-  {% set m = data.modules %}
+{% set m = data.modules %}
+{% set is_obs = data.meta.composition_type == 'composicion-observatorio' %}
 
+{% if is_obs %}
+<main class="modules layout-observatorio">
+  <section class="module-card panel-main">
+    <h3>Lectura general</h3>
+    {% if m.editorial %}
+      <h4>{{ m.editorial.title }}</h4>
+      <p>{{ m.editorial.body }}</p>
+    {% else %}
+      <p>{{ data.standfirst }}</p>
+    {% endif %}
+  </section>
+
+  <section class="obs-grid">
+    {% if m.data_highlight and m.data_highlight.value %}
+    <article class="module-card module-data-highlight">
+      <p class="eyebrow">Indicador</p>
+      <p class="kpi">{{ m.data_highlight.value }}</p>
+      <small>{{ m.data_highlight.unit }}</small>
+      <p>{{ m.data_highlight.description }}</p>
+    </article>
+    {% endif %}
+
+    {% if m.concept and (m.concept.term or m.concept.explanation) %}
+    <article class="module-card module-concept">
+      <p class="eyebrow">Concepto</p>
+      <h4>{{ m.concept.term }}</h4>
+      <p>{{ m.concept.explanation }}</p>
+    </article>
+    {% endif %}
+
+    {% if m.map %}
+    <article class="module-card module-map">
+      {% if m.map.image %}<img src="{{ m.map.image }}" alt="Mapa o zona" />{% else %}<div class="img-ph img-ph-map"><span>Mapa / zona</span></div>{% endif %}
+      <p class="caption">{{ m.map.caption }}</p>
+    </article>
+    {% endif %}
+  </section>
+
+  <section class="obs-secondary">
+    {% if m.fact_sheet and (m.fact_sheet.title or m.fact_sheet.summary or m.fact_sheet['items']) %}
+    <article class="module-card module-factsheet">
+      <h4>{{ m.fact_sheet.title }}</h4>
+      <p>{{ m.fact_sheet.summary }}</p>
+      <ul>{% for item in m.fact_sheet['items'].split('\n') if item.strip() %}<li>{{ item }}</li>{% endfor %}</ul>
+    </article>
+    {% endif %}
+
+    {% if m.chart and m.chart.series %}
+    <article class="module-card module-chart">
+      <h4>Datos de referencia</h4>
+      <table><thead><tr><th>Etiqueta</th><th>Valor</th></tr></thead><tbody>{% for row in m.chart.series if row.label %}<tr><td>{{ row.label }}</td><td>{{ row.value }}</td></tr>{% endfor %}</tbody></table>
+    </article>
+    {% endif %}
+
+    {% if m.timeline and m.timeline|length > 0 %}
+    <article class="module-card module-timeline"><h4>Cronología</h4>{% for e in m.timeline if e.date or e.title or e.description %}<div class="event"><span>{{ e.date }}</span><strong>{{ e.title }}</strong><p>{{ e.description }}</p></div>{% endfor %}</article>
+    {% endif %}
+  </section>
+
+  {% if m.closing and m.closing.text %}<section class="module-card module-closing"><p>{{ m.closing.text }}</p></section>{% endif %}
+</main>
+{% else %}
+<main class="modules layout-divulgativa">
   {% if m.hero_photo %}
   <section class="module-card module-hero-photo">
-    {% if m.hero_photo.image %}
-      <img src="{{ m.hero_photo.image }}" alt="Foto protagonista" />
-    {% else %}
-      <div class="img-ph img-ph-hero"><span>Imagen protagonista</span></div>
-    {% endif %}
+    {% if m.hero_photo.image %}<img src="{{ m.hero_photo.image }}" alt="Foto protagonista" />{% else %}<div class="img-ph img-ph-hero-compact"><span>Imagen protagonista</span></div>{% endif %}
     {% if m.hero_photo.caption %}<p class="caption">{{ m.hero_photo.caption }}</p>{% endif %}
   </section>
   {% endif %}
 
-  {% if m.editorial %}
-  <section class="module-card module-editorial">
-    <h3>{{ m.editorial.title }}</h3>
-    <p>{{ m.editorial.body }}</p>
+  <section class="div-grid">
+    {% if m.editorial %}<article class="module-card module-editorial"><h3>{{ m.editorial.title }}</h3><p>{{ m.editorial.body }}</p></article>{% endif %}
+    {% if m.concept and (m.concept.term or m.concept.explanation) %}<article class="module-card module-concept"><p class="eyebrow">Concepto explicado</p><h4>{{ m.concept.term }}</h4><p>{{ m.concept.explanation }}</p></article>{% endif %}
+    {% if m.fact_sheet and (m.fact_sheet.title or m.fact_sheet.summary or m.fact_sheet['items']) %}<article class="module-card module-factsheet"><h4>{{ m.fact_sheet.title }}</h4><p>{{ m.fact_sheet.summary }}</p><ul>{% for item in m.fact_sheet['items'].split('\n') if item.strip() %}<li>{{ item }}</li>{% endfor %}</ul></article>{% endif %}
+    {% if m.quote and m.quote.text %}<blockquote class="module-card module-quote">{{ m.quote.text }}</blockquote>{% endif %}
   </section>
-  {% endif %}
 
-  {% if m.quote and m.quote.text %}
-  <blockquote class="module-card module-quote">{{ m.quote.text }}</blockquote>
-  {% endif %}
-
-  {% if m.concept and (m.concept.term or m.concept.explanation) %}
-  <section class="module-card module-concept">
-    <span class="badge badge-soft">Concepto explicado</span>
-    <h3>{{ m.concept.term }}</h3>
-    <p>{{ m.concept.explanation }}</p>
-  </section>
-  {% endif %}
-
-  {% if m.data_highlight and m.data_highlight.value %}
-  <section class="module-card module-data-highlight">
-    <div class="kpi-wrap">
-      <p class="kpi">{{ m.data_highlight.value }}</p>
-      <small>{{ m.data_highlight.unit }}</small>
-    </div>
-    <p>{{ m.data_highlight.description }}</p>
-  </section>
-  {% endif %}
-
-  {% if m.gallery and m.gallery|length > 0 %}
-  <section class="module-card module-gallery">
-    {% for item in m.gallery %}
-      {% if item.image %}
-      <figure>
-        <img src="{{ item.image }}" alt="Imagen de galería" />
-        {% if item.caption %}<figcaption>{{ item.caption }}</figcaption>{% endif %}
-      </figure>
-      {% endif %}
-    {% endfor %}
-  </section>
-  {% endif %}
-
-  {% if m.map %}
-  <section class="module-card module-map">
-    {% if m.map.image %}<img src="{{ m.map.image }}" alt="Mapa o zona" />{% else %}<div class="img-ph img-ph-map"><span>Mapa / zona</span></div>{% endif %}
-    <p class="caption">{{ m.map.caption }}</p>
-  </section>
-  {% endif %}
-
-  {% if m.timeline and m.timeline|length > 0 %}
-  <section class="module-card module-timeline">
-    <h3>Cronología</h3>
-    {% for e in m.timeline if e.date or e.title or e.description %}
-      <div class="event">
-        <span>{{ e.date }}</span>
-        <strong>{{ e.title }}</strong>
-        <p>{{ e.description }}</p>
-      </div>
-    {% endfor %}
-  </section>
-  {% endif %}
-
-  {% if m.fact_sheet and (m.fact_sheet.title or m.fact_sheet.summary or m.fact_sheet['items']) %}
-  <section class="module-card module-factsheet">
-    <span class="badge badge-soft">Ficha visual</span>
-    <h3>{{ m.fact_sheet.title }}</h3>
-    <p>{{ m.fact_sheet.summary }}</p>
-    <ul>{% for item in m.fact_sheet['items'].split('\n') if item.strip() %}<li>{{ item }}</li>{% endfor %}</ul>
-  </section>
-  {% endif %}
-
-  {% if m.chart and m.chart.series %}
-  <section class="module-card module-chart">
-    <h3>Datos de referencia</h3>
-    <table>
-      <thead><tr><th>Etiqueta</th><th>Valor</th></tr></thead>
-      <tbody>{% for row in m.chart.series if row.label %}<tr><td>{{ row.label }}</td><td>{{ row.value }}</td></tr>{% endfor %}</tbody>
-    </table>
-  </section>
-  {% endif %}
-
-  {% if m.closing and m.closing.text %}
-  <section class="module-card module-closing">
-    <p>{{ m.closing.text }}</p>
-  </section>
-  {% endif %}
+  {% if m.gallery and m.gallery|length > 0 %}<section class="module-card module-gallery">{% for item in m.gallery %}{% if item.image %}<figure><img src="{{ item.image }}" alt="Imagen de galería" />{% if item.caption %}<figcaption>{{ item.caption }}</figcaption>{% endif %}</figure>{% endif %}{% endfor %}</section>{% endif %}
+  {% if m.timeline and m.timeline|length > 0 %}<section class="module-card module-timeline"><h4>Cronología</h4>{% for e in m.timeline if e.date or e.title or e.description %}<div class="event"><span>{{ e.date }}</span><strong>{{ e.title }}</strong><p>{{ e.description }}</p></div>{% endfor %}</section>{% endif %}
+  {% if m.closing and m.closing.text %}<section class="module-card module-closing"><p>{{ m.closing.text }}</p></section>{% endif %}
 </main>
+{% endif %}
