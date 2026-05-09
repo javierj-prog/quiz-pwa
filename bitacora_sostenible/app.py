@@ -243,6 +243,7 @@ def compose_data(config: dict[str, Any]) -> dict[str, Any]:
             "issue_number": issue_number,
             "issue_date": issue_date,
             "layout_choice": layout_choice,
+            "composition_type": "composicion-observatorio" if "datos" in layout_choice.lower() else "composicion-divulgativa",
             "logo_uri": logo_uri,
             "logo_missing": not bool(logo_uri),
         },

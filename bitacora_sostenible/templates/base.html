@@ -6,25 +6,30 @@
   <title>{{ data.meta.publication_name }}</title>
   <style>{{ css }}</style>
 </head>
-<body>
+<body class="{{ data.meta.composition_type or 'composicion-divulgativa' }}">
   <article class="sheet">
     <header class="header">
+      <div class="header-ribbon"></div>
       <div class="header-topline">
-        <span class="badge">Publicación interna</span>
-        <span class="issue">Boletín {{ data.meta.issue_number or "s/n" }} · {{ data.meta.issue_date or "sin fecha" }}</span>
+        <span class="badge">Publicación interna · Autoridad Portuaria</span>
+        <span class="issue">Nº {{ data.meta.issue_number or "s/n" }} · {{ data.meta.issue_date or "sin fecha" }}</span>
       </div>
       <div class="header-main">
         <div class="logo-wrap">
-          {% if data.meta.logo_uri %}<img src="{{ data.meta.logo_uri }}" class="logo" alt="Logo APA"/>{% else %}<div class="logo-placeholder">APA</div>{% endif %}
+          {% if data.meta.logo_uri %}
+            <img src="{{ data.meta.logo_uri }}" class="logo" alt="Logo APA"/>
+          {% else %}
+            <div class="logo-placeholder">APA</div>
+          {% endif %}
         </div>
-        <div>
+        <div class="brand">
           <h1>{{ data.meta.publication_name }}</h1>
           <p class="subtitle">{{ data.meta.subtitle }}</p>
         </div>
       </div>
     </header>
 
-    <section class="hero-text card">
+    <section class="hero-text module-card module-hero-text">
       <h2>{{ data.headline }}</h2>
       <p>{{ data.standfirst }}</p>
     </section>
