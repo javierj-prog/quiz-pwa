@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "publication_name": "Bitácora Sostenible",
+    "subtitle": "La sostenibilidad explicada desde el trabajo diario del puerto",
+    "department": "División de Transición Ecológica, Sostenibilidad Medioambiental y Sistemas de Gestión",
+    "email": "medioambiente@puertoalicante.com",
+    "issue_number": "08",
+    "issue_date": "2026-05-09",
+    "layout_choice": "Pieza con datos",
+    "logo_uri": "",
+    "logo_missing": true
+  },
+  "headline": "Seguimiento de calidad del agua: lectura de situación",
+  "standfirst": "Se presenta una síntesis breve de la campaña reciente de control para facilitar una lectura compartida del estado del agua en distintas zonas operativas.",
+  "modules": {
+    "editorial": {
+      "title": "Lectura general",
+      "body": "Los resultados muestran estabilidad en la mayor parte de puntos de control y variaciones localizadas asociadas a condiciones de marea y actividad puntual."
+    },
+    "data_highlight": {
+      "value": "6.8",
+      "unit": "mg/L O₂",
+      "description": "Media de oxígeno disuelto en puntos interiores durante la última campaña."
+    },
+    "concept": {
+      "term": "Clorofila-a",
+      "explanation": "Indicador utilizado para estimar biomasa fitoplanctónica en el agua. Su interpretación requiere contexto temporal y espacial."
+    },
+    "map": {
+      "image": "",
+      "caption": "Plano de zonas de muestreo (placeholder)."
+    },
+    "closing": {
+      "text": "La próxima actualización incorporará la comparación estacional para afinar tendencias y variabilidad."}
+  }
+}
