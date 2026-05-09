@@ -64,14 +64,51 @@ def load_example(name: str) -> dict[str, Any]:
     fp = APP_DIR / "examples" / name
     return json.loads(fp.read_text(encoding="utf-8"))
 
+
+def apply_example_to_state(data: dict[str, Any]) -> None:
+    m = data.get("modules", {})
+    meta = data.get("meta", {})
+    st.session_state["issue_number"] = meta.get("issue_number", "")
+    st.session_state["issue_date"] = meta.get("issue_date", str(date.today()))
+    st.session_state["headline"] = data.get("headline", "")
+    st.session_state["standfirst"] = data.get("standfirst", "")
+
+    st.session_state["editorial_enabled"] = "editorial" in m
+    st.session_state["hero_enabled"] = "hero_photo" in m
+    st.session_state["gallery_enabled"] = "gallery" in m
+    st.session_state["quote_enabled"] = "quote" in m
+    st.session_state["concept_enabled"] = "concept" in m
+    st.session_state["data_enabled"] = "data_highlight" in m
+    st.session_state["chart_enabled"] = "chart" in m
+    st.session_state["map_enabled"] = "map" in m
+    st.session_state["timeline_enabled"] = "timeline" in m
+    st.session_state["facts_enabled"] = "fact_sheet" in m
+    st.session_state["closing_enabled"] = "closing" in m
+
+    st.session_state["editorial_title"] = m.get("editorial", {}).get("title", "")
+    st.session_state["editorial_body"] = m.get("editorial", {}).get("body", "")
+    st.session_state["hero_caption"] = m.get("hero_photo", {}).get("caption", "")
+    st.session_state["quote_text"] = m.get("quote", {}).get("text", "")
+    st.session_state["concept_term"] = m.get("concept", {}).get("term", "")
+    st.session_state["concept_exp"] = m.get("concept", {}).get("explanation", "")
+    st.session_state["data_value"] = m.get("data_highlight", {}).get("value", "")
+    st.session_state["data_unit"] = m.get("data_highlight", {}).get("unit", "")
+    st.session_state["data_desc"] = m.get("data_highlight", {}).get("description", "")
+    st.session_state["map_cap"] = m.get("map", {}).get("caption", "")
+    st.session_state["closing_text"] = m.get("closing", {}).get("text", "")
+    st.session_state["fact_title"] = m.get("fact_sheet", {}).get("title", "")
+    st.session_state["fact_summary"] = m.get("fact_sheet", {}).get("summary", "")
+    st.session_state["fact_items"] = m.get("fact_sheet", {}).get("items", "")
+
+
 def compose_data(config: dict[str, Any]) -> dict[str, Any]:
     st.sidebar.header("Datos base del boletín")
-    issue_number = st.sidebar.text_input("Número de boletín", value=config.get("default_issue_number", ""))
+    issue_number = st.sidebar.text_input("Número de boletín", key="issue_number", value=st.session_state.get("issue_number", config.get("default_issue_number", "")))
     default_dt = config.get("default_date") or str(date.today())
-    issue_date = st.sidebar.text_input("Fecha", value=default_dt)
+    issue_date = st.sidebar.text_input("Fecha", key="issue_date", value=st.session_state.get("issue_date", default_dt))
 
-    title = st.sidebar.text_input("Titular principal")
-    standfirst = st.sidebar.text_area("Entradilla", height=120)
+    title = st.sidebar.text_input("Titular principal", key="headline", value=st.session_state.get("headline", ""))
+    standfirst = st.sidebar.text_area("Entradilla", key="standfirst", value=st.session_state.get("standfirst", ""), height=120)
 
     layout_choice = st.sidebar.selectbox(
         "Tipo de composición sugerida",
@@ -80,17 +117,17 @@ def compose_data(config: dict[str, Any]) -> dict[str, Any]:
 
     st.sidebar.header("Módulos opcionales")
     module_keys = {
-        "editorial": st.sidebar.checkbox("Texto editorial", value=True),
-        "hero_photo": st.sidebar.checkbox("Foto protagonista", value=True),
-        "gallery": st.sidebar.checkbox("Galería", value=False),
-        "quote": st.sidebar.checkbox("Cita destacada", value=False),
-        "concept": st.sidebar.checkbox("Concepto explicado", value=True),
-        "data_highlight": st.sidebar.checkbox("Dato destacado", value=False),
-        "chart": st.sidebar.checkbox("Gráfico simple", value=False),
-        "map": st.sidebar.checkbox("Mapa o zona", value=False),
-        "timeline": st.sidebar.checkbox("Cronología", value=False),
-        "fact_sheet": st.sidebar.checkbox("Ficha visual", value=False),
-        "closing": st.sidebar.checkbox("Cierre", value=True),
+        "editorial": st.sidebar.checkbox("Texto editorial", key="editorial_enabled", value=st.session_state.get("editorial_enabled", True)),
+        "hero_photo": st.sidebar.checkbox("Foto protagonista", key="hero_enabled", value=st.session_state.get("hero_enabled", True)),
+        "gallery": st.sidebar.checkbox("Galería", key="gallery_enabled", value=st.session_state.get("gallery_enabled", False)),
+        "quote": st.sidebar.checkbox("Cita destacada", key="quote_enabled", value=st.session_state.get("quote_enabled", False)),
+        "concept": st.sidebar.checkbox("Concepto explicado", key="concept_enabled", value=st.session_state.get("concept_enabled", True)),
+        "data_highlight": st.sidebar.checkbox("Dato destacado", key="data_enabled", value=st.session_state.get("data_enabled", False)),
+        "chart": st.sidebar.checkbox("Gráfico simple", key="chart_enabled", value=st.session_state.get("chart_enabled", False)),
+        "map": st.sidebar.checkbox("Mapa o zona", key="map_enabled", value=st.session_state.get("map_enabled", False)),
+        "timeline": st.sidebar.checkbox("Cronología", key="timeline_enabled", value=st.session_state.get("timeline_enabled", False)),
+        "fact_sheet": st.sidebar.checkbox("Ficha visual", key="facts_enabled", value=st.session_state.get("facts_enabled", False)),
+        "closing": st.sidebar.checkbox("Cierre", key="closing_enabled", value=st.session_state.get("closing_enabled", True)),
     }
 
     modules: dict[str, Any] = {}
@@ -223,18 +260,17 @@ def main():
     st.set_page_config(page_title="Bitácora Sostenible", layout="wide")
     config = load_config()
 
-    if "example_data" not in st.session_state:
-        st.session_state.example_data = None
-
     st.sidebar.subheader("Carga rápida")
     if st.sidebar.button("Cargar ejemplo: Cetáceos"):
-        st.session_state.example_data = load_example("bitacora_cetaceos_demo.json")
+        apply_example_to_state(load_example("bitacora_cetaceos_demo.json"))
+        st.rerun()
     if st.sidebar.button("Cargar ejemplo: Calidad del agua"):
-        st.session_state.example_data = load_example("bitacora_agua_demo.json")
+        apply_example_to_state(load_example("bitacora_agua_demo.json"))
+        st.rerun()
     st.title("Bitácora Sostenible · Constructor editorial")
     st.caption("MVP modular para crear boletines ambientales internos claros, visuales y exportables.")
 
-    data = st.session_state.example_data or compose_data(config)
+    data = compose_data(config)
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Guardar / Cargar")
