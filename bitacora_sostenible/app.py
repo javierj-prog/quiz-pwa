@@ -15,6 +15,7 @@ CONFIG_PATH = APP_DIR / "config" / "config.yaml"
 OUTPUT_DIR = APP_DIR / "outputs"
 TEMPLATES_DIR = APP_DIR / "templates"
 STYLES_PATH = APP_DIR / "styles" / "bitacora.css"
+EDITORIAL_STYLES_PATH = APP_DIR / "styles" / "editorial_visual.css"
 
 
 def load_config() -> dict[str, Any]:
@@ -136,6 +137,11 @@ def compose_data(config: dict[str, Any]) -> dict[str, Any]:
         "Tipo de composición sugerida",
         ["Pieza divulgativa", "Pieza visual/fotográfica", "Pieza con datos", "Pieza explicativa técnica"],
     )
+    template_variant = st.sidebar.selectbox(
+        "Plantilla de salida",
+        ["Plantilla básica", "Plantilla editorial visual"],
+        key="template_variant_selector",
+    )
 
     st.sidebar.header("Módulos opcionales")
     module_keys = {
@@ -244,6 +250,7 @@ def compose_data(config: dict[str, Any]) -> dict[str, Any]:
             "issue_date": issue_date,
             "layout_choice": layout_choice,
             "composition_type": "composicion-observatorio" if "datos" in layout_choice.lower() else "composicion-divulgativa",
+            "template_variant": "editorial_visual" if template_variant == "Plantilla editorial visual" else "basic",
             "logo_uri": logo_uri,
             "logo_missing": not bool(logo_uri),
         },
@@ -255,8 +262,10 @@ def compose_data(config: dict[str, Any]) -> dict[str, Any]:
 
 def render_html(data: dict[str, Any]) -> str:
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=select_autoescape(["html"]))
-    template = env.get_template("base.html")
-    css = STYLES_PATH.read_text(encoding="utf-8")
+    template_name = "editorial_visual.html" if data["meta"].get("template_variant") == "editorial_visual" else "base.html"
+    style_path = EDITORIAL_STYLES_PATH if template_name == "editorial_visual.html" else STYLES_PATH
+    template = env.get_template(template_name)
+    css = style_path.read_text(encoding="utf-8")
     return template.render(data=data, css=css)
 
 
