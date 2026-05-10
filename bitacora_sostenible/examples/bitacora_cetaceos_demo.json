@@ -28,7 +28,7 @@
     "fact_sheet": {
       "title": "Ficha visual · Cetáceos",
       "summary": "Guía breve para homogeneizar observaciones durante la campaña.",
-      "items": "Especie observada (si es posible)\nNúmero aproximado de individuos\nDirección de desplazamiento\nCondición del mar y visibilidad"
+      "entries": "Especie observada (si es posible)\nNúmero aproximado de individuos\nDirección de desplazamiento\nCondición del mar y visibilidad"
     },
     "closing": {
       "text": "Esta primera fase prioriza la calidad del registro y la trazabilidad de cada observación para construir una base útil a medio plazo."

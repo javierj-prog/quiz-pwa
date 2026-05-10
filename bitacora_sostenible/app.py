@@ -63,7 +63,17 @@ def local_image_to_data_uri(path: Path) -> str:
 
 def load_example(name: str) -> dict[str, Any]:
     fp = APP_DIR / "examples" / name
-    return json.loads(fp.read_text(encoding="utf-8"))
+    return normalize_fact_sheet(json.loads(fp.read_text(encoding="utf-8")))
+
+
+def normalize_fact_sheet(data: dict[str, Any]) -> dict[str, Any]:
+    modules = data.get("modules", {})
+    fact_sheet = modules.get("fact_sheet")
+    if isinstance(fact_sheet, dict):
+        if "entries" not in fact_sheet and "items" in fact_sheet:
+            fact_sheet["entries"] = fact_sheet.get("items", "")
+        fact_sheet.pop("items", None)
+    return data
 
 
 def apply_example_to_state(data: dict[str, Any]) -> None:
@@ -99,7 +109,7 @@ def apply_example_to_state(data: dict[str, Any]) -> None:
     st.session_state["closing_text"] = m.get("closing", {}).get("text", "")
     st.session_state["fact_title"] = m.get("fact_sheet", {}).get("title", "")
     st.session_state["fact_summary"] = m.get("fact_sheet", {}).get("summary", "")
-    st.session_state["fact_items"] = m.get("fact_sheet", {}).get("items", "")
+    st.session_state["fact_entries"] = m.get("fact_sheet", {}).get("entries", "")
 
 
 
@@ -232,7 +242,7 @@ def compose_data(config: dict[str, Any]) -> dict[str, Any]:
             modules["fact_sheet"] = {
                 "title": st.text_input("Título ficha", key="fact_title"),
                 "summary": st.text_area("Resumen", key="fact_summary", height=120),
-                "items": st.text_area("Elementos clave (una línea por punto)", key="fact_items", height=100),
+                "entries": st.text_area("Elementos clave (una línea por punto)", key="fact_entries", height=100),
             }
 
         if module_keys["closing"]:
@@ -332,7 +342,7 @@ def main():
         st.download_button("Guardar JSON", data=json_blob.encode("utf-8"), file_name=json_name, mime="application/json")
         uploaded = st.file_uploader("Cargar JSON previo", type=["json"])
         if uploaded:
-            loaded = json.loads(uploaded.read().decode("utf-8"))
+            loaded = normalize_fact_sheet(json.loads(uploaded.read().decode("utf-8")))
             st.info("JSON cargado. Copia/pega campos clave o úsalo como referencia en esta versión MVP.")
             st.json(loaded)
 

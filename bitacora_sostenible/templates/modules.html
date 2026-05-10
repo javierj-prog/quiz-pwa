@@ -40,11 +40,11 @@
   </section>
 
   <section class="obs-secondary">
-    {% if m.fact_sheet and (m.fact_sheet.title or m.fact_sheet.summary or m.fact_sheet['items']) %}
+    {% if m.fact_sheet and (m.fact_sheet.title or m.fact_sheet.summary or m.fact_sheet['entries']) %}
     <article class="module-card module-factsheet">
       <h4>{{ m.fact_sheet.title }}</h4>
       <p>{{ m.fact_sheet.summary }}</p>
-      <ul>{% for item in m.fact_sheet['items'].split('\n') if item.strip() %}<li>{{ item }}</li>{% endfor %}</ul>
+      <ul>{% for item in m.fact_sheet['entries'].split('\n') if item.strip() %}<li>{{ item }}</li>{% endfor %}</ul>
     </article>
     {% endif %}
 
@@ -74,7 +74,7 @@
   <section class="div-grid">
     {% if m.editorial %}<article class="module-card module-editorial"><h3>{{ m.editorial.title }}</h3><p>{{ m.editorial.body }}</p></article>{% endif %}
     {% if m.concept and (m.concept.term or m.concept.explanation) %}<article class="module-card module-concept"><p class="eyebrow">Concepto explicado</p><h4>{{ m.concept.term }}</h4><p>{{ m.concept.explanation }}</p></article>{% endif %}
-    {% if m.fact_sheet and (m.fact_sheet.title or m.fact_sheet.summary or m.fact_sheet['items']) %}<article class="module-card module-factsheet"><h4>{{ m.fact_sheet.title }}</h4><p>{{ m.fact_sheet.summary }}</p><ul>{% for item in m.fact_sheet['items'].split('\n') if item.strip() %}<li>{{ item }}</li>{% endfor %}</ul></article>{% endif %}
+    {% if m.fact_sheet and (m.fact_sheet.title or m.fact_sheet.summary or m.fact_sheet['entries']) %}<article class="module-card module-factsheet"><h4>{{ m.fact_sheet.title }}</h4><p>{{ m.fact_sheet.summary }}</p><ul>{% for item in m.fact_sheet['entries'].split('\n') if item.strip() %}<li>{{ item }}</li>{% endfor %}</ul></article>{% endif %}
     {% if m.quote and m.quote.text %}<blockquote class="module-card module-quote">{{ m.quote.text }}</blockquote>{% endif %}
   </section>
 
